@@ -1,0 +1,17 @@
+microsoft-graph-lab:
+  display_name: Microsoft Graph Lab Stand-in
+  auth_mode: OAUTH2
+  authorization_url: http://microsoft-login-stand-in:8080/authorize
+  token_url: http://microsoft-login-stand-in:8080/token
+  authorization_params:
+    response_type: code
+  token_params:
+    grant_type: authorization_code
+  refresh_params:
+    grant_type: refresh_token
+  proxy:
+    base_url: http://microsoft-graph-stand-in:8080
+  scopes:
+    openid: openid
+    offline_access: offline_access
+    mail: Mail.Read Mail.Send

@@ -1,0 +1,123 @@
+# Ports avoid clashing with sibling e2e (4200/3200/…) and user-oauth demos.
+name: app-per-agent-hiagent-demo
+
+services:
+  litellm-token-database:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: litellm-local
+      POSTGRES_DB: litellm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5436:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  microsoft-login-stand-in:
+    image: python:3.12-slim
+    command: ["python", "/server.py"]
+    environment:
+      JWT_SECRET: lab-jwt-secret
+      LOGIN_LOG: /logs/login.jsonl
+      EXPIRES_IN: "3600"
+      PORT: "8080"
+    volumes:
+      - ../e2e/microsoft-login-stand-in/server.py:/server.py:ro
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:8381:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  microsoft-graph-stand-in:
+    image: python:3.12-slim
+    command: ["python", "/server.py"]
+    environment:
+      GRAPH_LOG: /logs/graph.jsonl
+      PORT: "8080"
+    volumes:
+      - ../../user-oauth/e2e/microsoft-graph-stand-in/server.py:/server.py:ro
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:8382:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  softeria-m365-mcp:
+    image: ghcr.io/softeria/ms-365-mcp-server:latest
+    command: ["--http", "0.0.0.0:3000", "--org-mode", "--enable-attachment-urls"]
+    environment:
+      MS365_MCP_GRAPH_BASE_URL: http://microsoft-graph-stand-in:8080
+      MS365_MCP_TOOL_DEFINITION_BUDGET: "256"
+      MS365_MCP_RATE_LIMIT_DISABLED: "true"
+      MS365_MCP_ATTACHMENT_URL_BASE: http://softeria-m365-mcp:3000
+    ports:
+      - "127.0.0.1:3300:3000"
+
+  litellm-gateway:
+    image: ghcr.io/berriai/litellm:main-stable
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: sk-local-master
+      LITELLM_SALT_KEY: sk-local-salt
+      DATABASE_URL: postgresql://litellm:litellm-local@litellm-token-database:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      PROXY_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:4300}
+      OPENAI_API_KEY: sk-unused
+      AUDIT_LOG: /policy/audit.log
+      CONNECTION_POLICY: /app/connection_policy.yaml
+      PYTHONPATH: /app
+    volumes:
+      - ../e2e/litellm/config.yaml:/app/config.yaml:ro
+      - ../e2e/litellm/policy_guardrail.py:/app/policy_guardrail.py:ro
+      - ./connection_policy.yaml:/app/connection_policy.yaml
+      - ./logs:/policy
+    ports:
+      - "127.0.0.1:4300:4000"
+    depends_on:
+      litellm-token-database:
+        condition: service_healthy
+      microsoft-login-stand-in:
+        condition: service_healthy
+      microsoft-graph-stand-in:
+        condition: service_healthy
+      softeria-m365-mcp:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')"
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+  caddy:
+    image: caddy:2.8-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:8089:8080"
+    depends_on:
+      litellm-gateway:
+        condition: service_healthy
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "--url", "http://caddy:8080"]
+    depends_on:
+      - caddy
+
+volumes:
+  pgdata:

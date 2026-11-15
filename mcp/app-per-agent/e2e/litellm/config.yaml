@@ -1,0 +1,19 @@
+model_list:
+  - model_name: unused
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  store_model_in_db: true
+
+litellm_settings:
+  drop_params: true
+
+guardrails:
+  - guardrail_name: connection-policy
+    litellm_params:
+      guardrail: policy_guardrail.PolicyGuardrail
+      mode: pre_mcp_call
+      default_on: true

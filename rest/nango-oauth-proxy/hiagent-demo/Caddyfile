@@ -1,0 +1,42 @@
+:8080 {
+	# Keycloak Admin Console + static assets (hostname is the tunnel, so /admin
+	# must NOT fall through to the policy proxy → {"error":"missing_bearer"})
+	handle /admin* {
+		reverse_proxy keycloak:8080 {
+			header_up X-Forwarded-Proto {http.request.scheme}
+			header_up X-Forwarded-Host {http.request.host}
+			header_up X-Real-IP {http.request.remote.host}
+		}
+	}
+
+	# Keycloak AS (Hi Agent OAuth + IdP broker callbacks)
+	handle /realms/* {
+		reverse_proxy keycloak:8080 {
+			header_up X-Forwarded-Proto {http.request.scheme}
+			header_up X-Forwarded-Host {http.request.host}
+			header_up X-Real-IP {http.request.remote.host}
+		}
+	}
+	handle /resources/* {
+		reverse_proxy keycloak:8080 {
+			header_up X-Forwarded-Proto {http.request.scheme}
+			header_up X-Forwarded-Host {http.request.host}
+		}
+	}
+	handle /js/* {
+		reverse_proxy keycloak:8080 {
+			header_up X-Forwarded-Proto {http.request.scheme}
+			header_up X-Forwarded-Host {http.request.host}
+		}
+	}
+
+	# Microsoft login stand-in (browser IdP) — same tunnel host as Keycloak
+	handle_path /login/* {
+		reverse_proxy microsoft-login-stand-in:8080
+	}
+
+	# Policy proxy OpenAPI + Graph tools + /oauth/token shim
+	handle {
+		reverse_proxy policy-proxy:8080
+	}
+}

@@ -1,0 +1,33 @@
+# Local secrets / runtime (never publish) — keep *.example committed
+.env
+.env.*
+!**/.env.example
+*.pem
+*.key
+.nango-secret
+.nango-encryption-key
+.tunnel-url
+.hiagent-banner
+.hiagent-virtual-key
+.agent-*-virtual-key
+!**/.nango-secret.example
+!**/.nango-encryption-key.example
+!.hiagent-virtual-key.example
+!.agent-*-virtual-key.example
+!**/.hiagent-virtual-key.example
+!**/.agent-*-virtual-key.example
+
+# Python / test / venv
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Lab runtime logs
+**/logs/
+*.jsonl
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,7 @@
+logs/
+.tunnel-url
+.hiagent-virtual-key
+!.hiagent-virtual-key.example
+.venv/
+__pycache__/
+*.pyc

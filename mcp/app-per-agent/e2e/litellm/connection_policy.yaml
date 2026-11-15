@@ -1,0 +1,9 @@
+# Per-agent MCP aliases; one Entra app (M2M) each at seed time.
+m365_a:
+  list-mail-folder-messages:
+    mailFolderId: folder-x
+
+m365_b:
+  send-mail:
+    to: [allowed@example.com]
+    deny: [cc, bcc, ccRecipients, bccRecipients]

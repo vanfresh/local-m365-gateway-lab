@@ -1,0 +1,3 @@
+# Same 32-byte lab key as .env.example (base64). Copy only if a script expects
+# this filename; compose normally reads NANGO_ENCRYPTION_KEY from .env.
+bG9jYWwtbTM2NS1nYXRld2F5LW5hbmdvLWtleSEhISE=

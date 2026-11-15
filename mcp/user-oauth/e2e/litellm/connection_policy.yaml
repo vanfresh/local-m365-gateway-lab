@@ -1,0 +1,36 @@
+m365:
+  list-mail-folder-messages:
+    mailFolderId:
+    - folder-x
+    - folder-y
+    only: true
+  send-mail:
+    to:
+    - allowed@example.com
+    deny:
+    - cc
+    - bcc
+    - ccRecipients
+    - bccRecipients
+  send-channel-message:
+    teamId: team-1
+    channelId: channel-1
+  send-chat-message:
+    chatId: chat-1
+  list-sharepoint-site-items:
+    siteId: site-a
+agent_a:
+  list-mail-folder-messages:
+    mailFolderId: folder-x
+    only: true
+agent_b:
+  send-mail:
+    to:
+    - allowed@example.com
+    deny:
+    - cc
+    - bcc
+    - ccRecipients
+    - bccRecipients
+catalog:
+  allow_all: true

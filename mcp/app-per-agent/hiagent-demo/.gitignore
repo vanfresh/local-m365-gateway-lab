@@ -1,0 +1,9 @@
+logs/
+.tunnel-url
+.agent-a-virtual-key
+.agent-b-virtual-key
+!.agent-a-virtual-key.example
+!.agent-b-virtual-key.example
+.venv/
+__pycache__/
+*.pyc

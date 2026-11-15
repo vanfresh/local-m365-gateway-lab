@@ -1,0 +1,171 @@
+# Demo host ports are offset from e2e/ so both can run (e2e keeps 8085/3003/8481/8482/4400).
+name: rest-nango-hiagent-demo
+
+services:
+  keycloak-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_DB: keycloak
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.6
+    command:
+      - start-dev
+      - --http-port=8080
+      - --hostname=${KEYCLOAK_HOSTNAME_URL:-http://127.0.0.1:8185}
+      - --hostname-strict=true
+      - --proxy-headers=xforwarded
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+    ports:
+      - "127.0.0.1:8185:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+
+  nango-db:
+    image: postgres:16.0-alpine
+    environment:
+      POSTGRES_USER: nango
+      POSTGRES_PASSWORD: nango
+      POSTGRES_DB: nango
+    ports:
+      - "127.0.0.1:5438:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nango -d nango"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  nango-server:
+    image: nangohq/nango-server:hosted
+    platform: linux/amd64
+    environment:
+      NANGO_ENCRYPTION_KEY: ${NANGO_ENCRYPTION_KEY}
+      NANGO_DB_USER: nango
+      NANGO_DB_PASSWORD: nango
+      NANGO_DB_HOST: nango-db
+      NANGO_DB_NAME: nango
+      SERVER_PORT: "3003"
+      NANGO_SERVER_URL: ${NANGO_SERVER_URL:-http://127.0.0.1:3103}
+      NANGO_PUBLIC_SERVER_URL: ${NANGO_PUBLIC_SERVER_URL:-http://127.0.0.1:3103}
+      FLAG_AUTH_ENABLED: "false"
+      FLAG_SERVE_CONNECT_UI: "true"
+      NANGO_LOGS_ENABLED: "false"
+      RECORDS_DATABASE_URL: postgresql://nango:nango@nango-db:5432/nango
+      NANGO_OUTBOUND_URL_POLICY: '{"blockPrivateIps":false,"mode":"permissive"}'
+    volumes:
+      - ../e2e/nango/providers.yaml:/app/nango/packages/providers/providers.yaml:ro
+    ports:
+      - "127.0.0.1:3103:3003"
+      - "127.0.0.1:3109:3009"
+    depends_on:
+      nango-db:
+        condition: service_healthy
+
+  microsoft-login-stand-in:
+    image: python:3.12-slim
+    command: ["python", "/server.py"]
+    environment:
+      JWT_SECRET: lab-jwt-secret
+      LOGIN_LOG: /logs/login.jsonl
+      EXPIRES_IN: "3600"
+      PORT: "8080"
+      ISSUER: ${LOGIN_ISSUER:-http://127.0.0.1:8581}
+    volumes:
+      - ../e2e/microsoft-login-stand-in/server.py:/server.py:ro
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:8581:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  microsoft-graph-stand-in:
+    image: python:3.12-slim
+    command: ["python", "/server.py"]
+    environment:
+      GRAPH_LOG: /logs/graph.jsonl
+      PORT: "8080"
+    volumes:
+      - ../../../mcp/user-oauth/e2e/microsoft-graph-stand-in/server.py:/server.py:ro
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:8582:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  policy-proxy:
+    image: python:3.12-slim
+    working_dir: /app
+    command:
+      - bash
+      - -lc
+      - pip install -q PyYAML==6.0.2 && python /app/server.py
+    environment:
+      PORT: "8080"
+      KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL:-http://host.docker.internal:8185}
+      KEYCLOAK_REALM: hiagent-lab
+      KEYCLOAK_IDP_ALIAS: microsoft-standin
+      NANGO_URL: http://nango-server:3003
+      NANGO_SECRET_KEY: ${NANGO_SECRET_KEY:-}
+      NANGO_PROVIDER_CONFIG_KEY: microsoft-graph-lab
+      CONNECTION_POLICY: /app/connection_policy.yaml
+      AUDIT_LOG: /logs/audit.log
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../e2e/policy-proxy/server.py:/app/server.py:ro
+      - ../e2e/policy-proxy/connection_policy.yaml:/app/connection_policy.yaml:ro
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:4500:8080"
+    depends_on:
+      microsoft-login-stand-in:
+        condition: service_healthy
+      microsoft-graph-stand-in:
+        condition: service_healthy
+      nango-server:
+        condition: service_started
+      keycloak:
+        condition: service_started
+
+  caddy:
+    image: caddy:2.8-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:8090:8080"
+    depends_on:
+      policy-proxy:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      microsoft-login-stand-in:
+        condition: service_healthy
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "--url", "http://caddy:8080"]
+    depends_on:
+      - caddy

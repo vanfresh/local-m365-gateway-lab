@@ -1,0 +1,26 @@
+# Demo ceiling for hosted Hi Agent (no catalog).
+m365:
+  # Require an allowlisted folder. Do not set only:true here — Softeria’s tool
+  # schema has optional Graph query fields and Hi Agent models often send them;
+  # only:true then rejects every call that isn’t exactly {mailFolderId: ...}.
+  list-mail-folder-messages:
+    mailFolderId: [folder-x, folder-y]
+  send-mail:
+    to: [allowed@example.com]
+    deny: [cc, bcc, ccRecipients, bccRecipients]
+  send-channel-message:
+    teamId: team-1
+    channelId: channel-1
+  send-chat-message:
+    chatId: chat-1
+  list-sharepoint-site-items:
+    siteId: site-a
+
+agent_a:
+  list-mail-folder-messages:
+    mailFolderId: folder-x
+
+agent_b:
+  send-mail:
+    to: [allowed@example.com]
+    deny: [cc, bcc, ccRecipients, bccRecipients]

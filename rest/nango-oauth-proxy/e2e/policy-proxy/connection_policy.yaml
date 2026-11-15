@@ -1,0 +1,13 @@
+agent-a:
+  methods: [GET]
+  paths:
+    - prefix: /v1.0/me/mailFolders/folder-x/messages
+  deny_query: []
+
+agent-b:
+  methods: [POST]
+  paths:
+    - prefix: /v1.0/me/sendMail
+  # Body checks applied in proxy for to-recipient allowlist
+  allow_to: [allowed@example.com]
+  deny_body_keys: [ccRecipients, bccRecipients, cc, bcc]

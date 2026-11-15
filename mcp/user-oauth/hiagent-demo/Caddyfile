@@ -1,0 +1,10 @@
+:8080 {
+	# Browser OAuth hits the login stand-in through the public tunnel.
+	handle_path /login/* {
+		reverse_proxy microsoft-login-stand-in:8080
+	}
+
+	handle {
+		reverse_proxy litellm-gateway:4000
+	}
+}
