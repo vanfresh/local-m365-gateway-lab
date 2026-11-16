@@ -1,0 +1,12 @@
+agent-a:
+  methods: [POST]
+  paths:
+    - prefix: /a2a/v1/message:stream
+  deny_query: []
+
+agent-b:
+  methods: [POST]
+  paths:
+    - prefix: /a2a/v1/message:stream
+  deny_body_keys: []
+  deny_text_contains: [blocked-skill]

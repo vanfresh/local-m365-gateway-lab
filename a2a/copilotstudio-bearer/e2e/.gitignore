@@ -1,0 +1,12 @@
+logs/
+.venv/
+.pytest_cache/
+.nango-secret
+.nango-encryption-key
+.env
+.env.bak
+!.env.example
+!.nango-secret.example
+!.nango-encryption-key.example
+__pycache__/
+*.pyc

@@ -1,0 +1,13 @@
+logs/
+.venv/
+.tunnel-url
+.hiagent-banner
+.nango-secret
+.nango-encryption-key
+.env
+.env.bak
+!.env.example
+!.nango-secret.example
+!.nango-encryption-key.example
+__pycache__/
+*.pyc

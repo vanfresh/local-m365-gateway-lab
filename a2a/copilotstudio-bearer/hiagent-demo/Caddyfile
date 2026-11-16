@@ -1,0 +1,7 @@
+:8080 {
+	# Tunnel only needs the A2A gateway (SSE URL + agent card).
+	# Login stand-in stays docker-internal for /_lab/issue.
+	handle {
+		reverse_proxy policy-proxy:8080
+	}
+}

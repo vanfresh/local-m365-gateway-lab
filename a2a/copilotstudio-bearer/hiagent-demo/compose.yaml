@@ -1,0 +1,129 @@
+name: a2a-bearer-hiagent-demo
+
+services:
+  nango-db:
+    image: postgres:16.0-alpine
+    environment:
+      POSTGRES_USER: nango
+      POSTGRES_PASSWORD: nango
+      POSTGRES_DB: nango
+    ports:
+      - "127.0.0.1:5442:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nango -d nango"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  nango-server:
+    image: nangohq/nango-server:hosted
+    platform: linux/amd64
+    environment:
+      NANGO_ENCRYPTION_KEY: ${NANGO_ENCRYPTION_KEY}
+      NANGO_DB_USER: nango
+      NANGO_DB_PASSWORD: nango
+      NANGO_DB_HOST: nango-db
+      NANGO_DB_NAME: nango
+      SERVER_PORT: "3003"
+      NANGO_SERVER_URL: ${NANGO_SERVER_URL:-http://127.0.0.1:3503}
+      NANGO_PUBLIC_SERVER_URL: ${NANGO_PUBLIC_SERVER_URL:-http://127.0.0.1:3503}
+      FLAG_AUTH_ENABLED: "false"
+      FLAG_SERVE_CONNECT_UI: "true"
+      NANGO_LOGS_ENABLED: "false"
+      RECORDS_DATABASE_URL: postgresql://nango:nango@nango-db:5432/nango
+      NANGO_OUTBOUND_URL_POLICY: '{"blockPrivateIps":false,"mode":"permissive"}'
+    volumes:
+      - ../e2e/nango/providers.yaml:/app/nango/packages/providers/providers.yaml:ro
+    ports:
+      - "127.0.0.1:3503:3003"
+      - "127.0.0.1:3509:3009"
+    depends_on:
+      nango-db:
+        condition: service_healthy
+
+  microsoft-login-stand-in:
+    image: python:3.12-slim
+    command: ["python", "/server.py"]
+    environment:
+      JWT_SECRET: lab-jwt-secret
+      LOGIN_LOG: /logs/login.jsonl
+      EXPIRES_IN: "3600"
+      PORT: "8080"
+      ISSUER: ${LOGIN_ISSUER:-http://127.0.0.1:8981}
+      TOKEN_AUD: https://api.powerplatform.com/copilotstudio-a2a
+      TOKEN_SCP: MCS.InvokeAsA2A
+    volumes:
+      - ../e2e/microsoft-login-stand-in/server.py:/server.py:ro
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:8981:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  copilot-a2a-stand-in:
+    image: python:3.12-slim
+    command: ["python", "/server.py"]
+    environment:
+      A2A_LOG: /logs/a2a.jsonl
+      PORT: "8080"
+      EXPECT_AUD: https://api.powerplatform.com/copilotstudio-a2a
+    volumes:
+      - ../e2e/copilot-a2a-stand-in/server.py:/server.py:ro
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:8982:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  policy-proxy:
+    image: python:3.12-slim
+    working_dir: /app
+    command:
+      - bash
+      - -lc
+      - pip install -q PyYAML==6.0.2 && python /app/server.py
+    environment:
+      PORT: "8080"
+      NANGO_URL: http://nango-server:3003
+      NANGO_SECRET_KEY: ${NANGO_SECRET_KEY:-}
+      NANGO_PROVIDER_CONFIG_KEY: copilot-a2a-lab
+      COPILOT_A2A_URL: http://copilot-a2a-stand-in:8080
+      LOGIN_STANDIN_URL: http://microsoft-login-stand-in:8080
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:4900}
+      CONNECTION_POLICY: /app/connection_policy.yaml
+      AUDIT_LOG: /logs/audit.log
+    volumes:
+      - ../e2e/policy-proxy/server.py:/app/server.py:ro
+      - ../e2e/policy-proxy/connection_policy.yaml:/app/connection_policy.yaml:ro
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:4900:8080"
+    depends_on:
+      microsoft-login-stand-in:
+        condition: service_healthy
+      copilot-a2a-stand-in:
+        condition: service_healthy
+      nango-server:
+        condition: service_started
+
+  caddy:
+    image: caddy:2.8-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:8490:8080"
+    depends_on:
+      policy-proxy:
+        condition: service_started
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "--url", "http://caddy:8080"]
+    depends_on:
+      - caddy
